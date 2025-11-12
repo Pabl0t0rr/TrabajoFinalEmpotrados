@@ -1,6 +1,6 @@
 #include <WiFi.h>
 #include <WebServer.h>
-#include "secrets.h"  // Aquí defines WIFI_SSID y WIFI_PASSWORD
+#include "/src/secrets.h"  // Aquí defines WIFI_SSID y WIFI_PASSWORD
 
 #define LED1 41
 
