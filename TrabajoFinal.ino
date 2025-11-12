@@ -1,91 +1,83 @@
 #include <WiFi.h>
 #include <WebServer.h>
-#include "/src/secrets.h"  // Aquí defines WIFI_SSID y WIFI_PASSWORD
+#include "src/secrets.h"
+#include "DHT.h"
 
 #define LED1 41
+#define DHTPIN 2
+#define DHTTYPE DHT22
 
 WebServer server(80);
+DHT dht(DHTPIN, DHTTYPE);
+bool led1State = false;
 
-bool led1State = false;  // Estado actual del LED
-
-// --- Función para generar el HTML dinámico ---
-String getHTML() {
-  String led1Text = led1State ? "ON" : "OFF";
-  String led1Class = led1State ? "" : "OFF";
-
-  String html = R"(
-    <!DOCTYPE html><html>
-      <head>
-        <title>ESP32 Web Server Demo</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-          html { font-family: sans-serif; text-align: center; }
-          body { display: inline-flex; flex-direction: column; }
-          h1 { margin-bottom: 1.2em; } 
-          h2 { margin: 0; }
-          div { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; grid-auto-flow: column; grid-gap: 1em; }
-          .btn { background-color: #5B5; border: none; color: #fff; padding: 0.5em 1em;
-                 font-size: 2em; text-decoration: none }
-          .btn.OFF { background-color: #333; }
-        </style>
-      </head>
-      <body>
-        <h1>ESP32 Web Server</h1>
-        <div>
-          <h2>LED 1</h2>
-          <a href="/toggle/1" class="btn )" + led1Class + R"(">)" + led1Text + R"(</a>
-        </div>
-      </body>
-    </html>
-  )";
-  return html;
+// --- Función para CORS y enviar JSON ---
+void sendJSONResponse(const String &json) {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "*");
+  server.send(200, "application/json", json);
 }
 
-// --- Ruta principal ---
+// --- Rutas ---
 void handleRoot() {
-  server.send(200, "text/html", getHTML());
+  server.send(200, "text/plain", "Servidor ESP32 IoT activo ✅");
 }
 
-// --- Ruta para alternar el LED ---
 void handleToggle() {
   if (server.arg(0) == "1" || server.uri().endsWith("/1")) {
-    led1State = !led1State;  // Cambia el estado
+    led1State = !led1State;
     digitalWrite(LED1, led1State ? HIGH : LOW);
-    Serial.print("LED 1: ");
-    Serial.println(led1State ? "ON" : "OFF");
+    Serial.printf("LED 1: %s\n", led1State ? "ON" : "OFF");
+    String json = "{\"status\":\"ok\",\"ledState\":" + String(led1State ? "true" : "false") + "}";
+    sendJSONResponse(json);
+  } else {
+    sendJSONResponse("{\"error\":\"LED no válido\"}");
   }
-  server.send(200, "text/html", getHTML());
 }
 
+void handleSensorData() {
+  float temp = dht.readTemperature();
+  float hum = dht.readHumidity();
+
+  if (isnan(temp) || isnan(hum)) {
+    sendJSONResponse("{\"error\":\"Fallo al leer el sensor\"}");
+    return;
+  }
+
+  String json = "{\"temperature\":" + String(temp, 1) + ",\"humidity\":" + String(hum, 0) + "}";
+  sendJSONResponse(json);
+}
+
+// --- Setup ---
 void setup() {
   Serial.begin(115200);
   pinMode(LED1, OUTPUT);
   digitalWrite(LED1, LOW);
+  dht.begin();
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-  Serial.print("Conectando a ");
-  Serial.println(WIFI_SSID);
-  
+  Serial.printf("Conectando a %s", WIFI_SSID);
   while (WiFi.status() != WL_CONNECTED) {
     delay(200);
     Serial.print(".");
   }
 
-  Serial.println();
-  Serial.print("Conectado a: ");
-  Serial.println(WiFi.SSID());
-  Serial.print("Dirección IP: ");
+  Serial.println("\n✅ WiFi conectado");
+  Serial.print("IP: ");
   Serial.println(WiFi.localIP());
 
   server.on("/", handleRoot);
   server.on("/toggle/1", handleToggle);
+  server.on("/api/sensor", handleSensorData);
 
   server.begin();
   Serial.println("Servidor web iniciado ✅");
 }
 
+// --- Loop ---
 void loop() {
   server.handleClient();
 }
