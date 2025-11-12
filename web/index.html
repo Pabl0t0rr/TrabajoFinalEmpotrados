@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel IoT - ESP32S3</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .status {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .status.connected {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .status.disconnected {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 30px rgba(0,0,0,0.2);
+        }
+
+        .card-icon {
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+
+        .card-label {
+            color: #999;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .card-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .card-unit {
+            color: #999;
+            font-size: 1em;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .led-control {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+
+        .led-label {
+            color: #999;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+            text-align: center;
+            display: block;
+        }
+
+        .led-button {
+            width: 100%;
+            padding: 20px;
+            font-size: 1.3em;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .led-button.off {
+            background: #f5f5f5;
+            color: #333;
+            border: 3px solid #ddd;
+        }
+
+        .led-button.off:hover {
+            background: #e8e8e8;
+            border-color: #bbb;
+        }
+
+        .led-button.on {
+            background: linear-gradient(135deg, #ff6b6b, #ff8787);
+            color: white;
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
+        }
+
+        .led-button.on:hover {
+            background: linear-gradient(135deg, #ff5252, #ff6e6e);
+            box-shadow: 0 6px 20px rgba(255, 107, 107, 0.6);
+            transform: translateY(-2px);
+        }
+
+        .loading {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(0,0,0,0.1);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        @media (max-width: 600px) {
+            .header h1 {
+                font-size: 2em;
+            }
+
+            .card-value {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌡️ Panel IoT</h1>
+            <p>ESP32S3 Sensor Dashboard</p>
+        </div>
+
+        <div class="status disconnected" id="status">
+            <span class="loading"></span> Conectando...
+        </div>
+
+        <div id="errorMessage"></div>
+
+        <div class="cards-grid">
+            <div class="card">
+                <div class="card-icon">🌡️</div>
+                <div class="card-label">Temperatura</div>
+                <div class="card-value" id="temperature">--</div>
+                <div class="card-unit">°C</div>
+            </div>
+
+            <div class="card">
+                <div class="card-icon">💧</div>
+                <div class="card-label">Humedad</div>
+                <div class="card-value" id="humidity">--</div>
+                <div class="card-unit">%</div>
+            </div>
+        </div>
+
+        <div class="led-control">
+            <span class="led-label">Control del LED</span>
+            <button class="led-button off" id="ledButton">Encender LED</button>
+        </div>
+    </div>
+
+    <script>
+        // Configuración
+        const ESP32_IP = 'http://192.168.1.100'; // Reemplaza con la IP de tu ESP32
+        const UPDATE_INTERVAL = 2000; // Actualizar cada 2 segundos
+
+        let ledState = false;
+        let isConnected = false;
+
+        // Elementos del DOM
+        const statusElement = document.getElementById('status');
+        const tempElement = document.getElementById('temperature');
+        const humidityElement = document.getElementById('humidity');
+        const ledButton = document.getElementById('ledButton');
+        const errorElement = document.getElementById('errorMessage');
+
+        // Función para obtener datos del sensor
+        async function fetchSensorData() {
+            try {
+                const response = await fetch(`${ESP32_IP}/api/sensor`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (!response.ok) throw new Error('Error en la respuesta');
+
+                const data = await response.json();
+                
+                // Actualizar valores
+                tempElement.textContent = data.temperature.toFixed(1);
+                humidityElement.textContent = data.humidity.toFixed(0);
+                
+                // Actualizar estado de conexión
+                if (!isConnected) {
+                    setConnected(true);
+                }
+
+            } catch (error) {
+                console.error('Error al obtener datos:', error);
+                setConnected(false);
+            }
+        }
+
+        // Función para controlar el LED
+        async function toggleLED() {
+            try {
+                const response = await fetch(`${ESP32_IP}/toggle/1`, {
+                    method: 'GET'
+                });
+
+                if (!response.ok) throw new Error('Error al controlar LED');
+
+                ledState = !ledState;
+                updateLEDButton();
+                setConnected(true);
+
+            } catch (error) {
+                console.error('Error al controlar LED:', error);
+                setConnected(false);
+            }
+        }
+
+        // Actualizar apariencia del botón
+        function updateLEDButton() {
+            if (ledState) {
+                ledButton.textContent = 'Apagar LED';
+                ledButton.className = 'led-button on';
+            } else {
+                ledButton.textContent = 'Encender LED';
+                ledButton.className = 'led-button off';
+            }
+        }
+
+        // Actualizar estado de conexión
+        function setConnected(connected) {
+            isConnected = connected;
+            
+            if (connected) {
+                statusElement.textContent = '✅ Conectado';
+                statusElement.className = 'status connected';
+                errorElement.innerHTML = '';
+            } else {
+                statusElement.innerHTML = '<span class="loading"></span> Desconectado';
+                statusElement.className = 'status disconnected';
+                errorElement.innerHTML = '<div class="error-message">⚠️ No se puede conectar con el ESP32. Verifica la dirección IP y la conexión de red.</div>';
+            }
+        }
+
+        // Event listeners
+        ledButton.addEventListener('click', toggleLED);
+
+        // Inicializar
+        fetchSensorData();
+        setInterval(fetchSensorData, UPDATE_INTERVAL);
+
+        // Mensaje inicial
+        console.log('Panel IoT iniciado. Conectando a:', ESP32_IP);
+    </script>
+</body>
+</html>
